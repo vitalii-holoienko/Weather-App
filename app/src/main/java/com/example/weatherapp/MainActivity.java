@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -168,6 +169,8 @@ public class MainActivity extends AppCompatActivity{
     static int todayWindSpeed;
     static String todayWeatherDescription;
 
+    private boolean internetConectionEnabled = true;
+
     LinearLayout forecastLayout;
 
     private final static int REQUEST_CODE = 100;
@@ -178,6 +181,7 @@ public class MainActivity extends AppCompatActivity{
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        Log.i("--------------------------", "!");
         java.util.Date date = new java.util.Date();
         Format formatter1 = new SimpleDateFormat("EEE,MMMdd,YYY");
         String time1s = formatter1.format(date);
@@ -220,9 +224,7 @@ public class MainActivity extends AppCompatActivity{
 
         time1.setText(time1s);
 
-        if(!isLocationEnabled()){
-            askResolutionForLocationTracking();
-        }
+
 
         getWeather.setPaintFlags(getWeather.getPaintFlags() |   Paint.UNDERLINE_TEXT_FLAG);
         getJsonData(generalLatitude, generalLongitude);
@@ -234,7 +236,7 @@ public class MainActivity extends AppCompatActivity{
                 getJsonData(userLatLng.latitude, userLatLng.longitude);
             }
         };
-        getLastLocation();
+
 
         int searchPlateId = enteredCity.getContext().getResources().getIdentifier("android:id/search_plate", null, null);
         View searchPlate = enteredCity.findViewById(searchPlateId);
@@ -248,6 +250,7 @@ public class MainActivity extends AppCompatActivity{
             @Override
             public void onClick(View v) {
                 askResolutionForLocationTracking();
+                getLastLocation();
             }
         });
 
@@ -255,17 +258,6 @@ public class MainActivity extends AppCompatActivity{
             @Override
             public void onClick(View v) {
                 enteredCity.onActionViewExpanded();
-            }
-        });
-
-        constraintLayout.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (enteredCity != null) {
-                    enteredCity.setQuery("", false);
-                    enteredCity.clearFocus();
-                    enteredCity.onActionViewCollapsed();
-                }
             }
         });
 
@@ -283,6 +275,9 @@ public class MainActivity extends AppCompatActivity{
                 return false;
             }
         });
+
+        askPermission();
+
     }
     @SuppressLint("SetTextI18n")
     private void displayMainInfo(){
@@ -408,7 +403,8 @@ public class MainActivity extends AppCompatActivity{
                     return null;
 
                 } catch (Exception e) {
-                    Log.i("Exception", e.getMessage());
+                    Intent intent = new Intent(getBaseContext(), IfNoInternetConnection.class);
+                    startActivity(intent);
                     return null;
                 }
 
@@ -575,7 +571,10 @@ public class MainActivity extends AppCompatActivity{
                     return null;
 
                 } catch (Exception e) {
-                    Log.i("Exception", e.getMessage());
+                    Log.i("Exception 1", e.getMessage());
+                    internetConectionEnabled = false;
+                    Intent intent = new Intent(getBaseContext(), IfNoInternetConnection.class);
+                    startActivity(intent);
                     return null;
                 }
 
@@ -583,14 +582,19 @@ public class MainActivity extends AppCompatActivity{
 
             @Override
             protected void onPostExecute(Void Void) {
-                displayMainInfo();
+                if(internetConectionEnabled){
+                    displayMainInfo();
+                }
+
             }
         }.execute();
 
     }
 
     private void getLastLocation() {
+        Log.i("getLastLocation", "!");
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            Log.i(" in getLastLocation", "!");
             fusedLocationProviderClient.getLastLocation().addOnSuccessListener(new OnSuccessListener<Location>() {
 
                 @Override
@@ -606,18 +610,22 @@ public class MainActivity extends AppCompatActivity{
 
                     if(lastLocation!=null)
                     {
+                        Log.i("lastLocation!=nul", "!");
                         userLatitude = lastLocation.getLatitude();
                         userLontitude = lastLocation.getLongitude();
                         getJsonData(userLatitude, userLontitude);
                         userLatLng = new LatLng(userLatitude, userLontitude);
                     }
                     else
+                    {
                         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0,0, locationListener);
+                    }
+
                 }
             });
         }
         else
-            askPermission();
+            askResolutionForLocationTracking();
 
     }
     private static double kelvinToCelsius(double n){
@@ -635,7 +643,16 @@ public class MainActivity extends AppCompatActivity{
         return "";
     }
     private void askPermission(){
+        askResolutionForLocationTracking();
         ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_CODE);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            if(!isLocationEnabled()){
+
+            }
+        }else{
+            Log.i("-", "!");
+        }
+
     }
 
     private  void askResolutionForLocationTracking(){
@@ -661,7 +678,6 @@ public class MainActivity extends AppCompatActivity{
                 {
                     //if location is already turned on
                     LocationSettingsResponse response = task.getResult(ApiException.class);
-                    Toast.makeText(MainActivity.this, "We are already displaying weather in your location", Toast.LENGTH_SHORT).show();
                 }
                 catch (ApiException e)
                 {
@@ -674,15 +690,15 @@ public class MainActivity extends AppCompatActivity{
 
                                 ResolvableApiException resolvableApiException = (ResolvableApiException)e;
                                 resolvableApiException.startResolutionForResult(MainActivity.this,REQUEST_CHECK_SETTING);
+                                getLastLocation();
                             } catch (IntentSender.SendIntentException ex) {
-
-                                ex.printStackTrace();
+                                return;
                             }
                             break;
 
                         case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
                             //Device does not have location
-                            break;
+                            return;
                     }
                 }
             }
@@ -700,5 +716,8 @@ public class MainActivity extends AppCompatActivity{
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
-    private Boolean isLocationEnabled() { return ( locationManager.isProviderEnabled( LocationManager.GPS_PROVIDER ) ); }
+    private Boolean isLocationEnabled() {
+        Log.i("ENABLED", String.valueOf(locationManager.isProviderEnabled( LocationManager.GPS_PROVIDER )));
+        return ( locationManager.isProviderEnabled( LocationManager.GPS_PROVIDER ) );
+    }
 }
